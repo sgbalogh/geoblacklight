@@ -46,4 +46,33 @@ namespace :geoblacklight do
     system 'curl -o jetty/solr/blacklight-core/conf/schema.xml https://raw.githubusercontent.com/geoblacklight/geoblacklight-schema/master/conf/schema.xml'
     system 'curl -o jetty/solr/blacklight-core/conf/solrconfig.xml https://raw.githubusercontent.com/geoblacklight/geoblacklight-schema/master/conf/solrconfig.xml'
   end
+
+  task :server do
+    if File.exists? 'spec/internal'
+      within_test_app do
+        system "bundle update"
+      end
+    else
+      Rake::Task['engine_cart:generate'].invoke
+    end
+
+    unless File.exists? 'jetty'
+      Rake::Task['jetty:clean'].invoke
+      Rake::Task['geoblacklight:configure_jetty'].invoke
+    end
+
+    jetty_params = Jettywrapper.load_config
+    jetty_params[:startup_wait]= 60
+
+    Jettywrapper.wrap(jetty_params) do
+      within_test_app do
+        unless File.exists? '.initialized'
+          system "rake geoblacklight:solr:seed"
+          system 'rake geoblacklight:downloads:mkdir'
+          File.open('.initialized', "w") {}
+        end
+        system "bundle exec rails s"
+      end
+    end
+  end
 end
